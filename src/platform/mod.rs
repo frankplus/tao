@@ -26,3 +26,5 @@ pub mod macos;
 pub mod run_return;
 pub mod unix;
 pub mod windows;
+#[cfg(target_env = "ohos")]
+pub mod openharmony;

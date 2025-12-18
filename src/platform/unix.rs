@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![cfg(any(
-  target_os = "linux",
+  all(target_os = "linux", not(target_env = "ohos")),
   target_os = "dragonfly",
   target_os = "freebsd",
   target_os = "netbsd",
