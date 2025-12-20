@@ -27,6 +27,7 @@ pub enum InternalEvent {
     OnSurfaceCreated(NativeXComponentPtr),
     OnSurfaceDestroyed,
     TouchEvent { x: f32, y: f32, phase: i32, id: i32 },
+    Wakeup,
 }
 
 struct GlobalChannel {
@@ -113,6 +114,7 @@ impl<T: 'static> EventLoop<T> {
                              event: WindowEvent::Touch(touch),
                          }, &self.window_target, &mut control_flow);
                      }
+                     InternalEvent::Wakeup => {}
                  }
             }
 
@@ -149,7 +151,9 @@ pub struct EventLoopProxy<T> {
 
 impl<T> EventLoopProxy<T> {
     pub fn send_event(&self, event: T) -> Result<(), EventLoopClosed<T>> {
-        self.tx.send(event).map_err(|e| EventLoopClosed(e.0))
+        let res = self.tx.send(event).map_err(|e| EventLoopClosed(e.0));
+        publish_event(InternalEvent::Wakeup);
+        res
     }
 }
 
