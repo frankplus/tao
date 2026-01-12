@@ -13,19 +13,12 @@ use crate::{
     },
 };
 
-use ohos_sys::xcomponent::{
-    OH_NativeXComponent,
-};
-
-#[derive(Debug, Clone, Copy)]
-pub struct NativeXComponentPtr(pub *mut OH_NativeXComponent);
-unsafe impl Send for NativeXComponentPtr {}
-unsafe impl Sync for NativeXComponentPtr {}
-
 #[derive(Debug)]
 pub enum InternalEvent {
-    OnSurfaceCreated(NativeXComponentPtr),
-    OnSurfaceDestroyed,
+    OnWindowCreated,
+    OnWindowDestroyed,
+    OnWindowFocus,
+    OnWindowBlur,
     TouchEvent { x: f32, y: f32, phase: i32, id: i32 },
     Wakeup,
 }
@@ -48,6 +41,23 @@ fn ensure_channel() {
 pub fn publish_event(event: InternalEvent) {
     ensure_channel();
     let _ = CHANNEL.get().unwrap().tx.send(event);
+}
+
+// Exported functions for NAPI
+pub fn on_window_created() {
+    publish_event(InternalEvent::OnWindowCreated);
+}
+
+pub fn on_window_destroyed() {
+    publish_event(InternalEvent::OnWindowDestroyed);
+}
+
+pub fn on_window_focus() {
+    publish_event(InternalEvent::OnWindowFocus);
+}
+
+pub fn on_window_blur() {
+    publish_event(InternalEvent::OnWindowBlur);
 }
 
 pub struct EventLoop<T: 'static> {
@@ -83,14 +93,25 @@ impl<T: 'static> EventLoop<T> {
             // 1. Process System Events
             if let Ok(event) = rx.recv() {
                  match event {
-                     InternalEvent::OnSurfaceCreated(ptr) => {
-                         // TODO: Store this somewhere so Window::new can pick it up?
-                         // Actually, in OpenHarmony the window (XComponent) is created by the system BEFORE we run this loop often.
-                         // But for now, just log or trigger a Resumed event.
+                     InternalEvent::OnWindowCreated => {
+                         // Similar to Android's Resumed/FocusGained
                          event_handler(Event::Resumed, &self.window_target, &mut control_flow);
                      }
-                     InternalEvent::OnSurfaceDestroyed => {
+                     InternalEvent::OnWindowDestroyed => {
+                         // Similar to Android's Suspended
                          event_handler(Event::Suspended, &self.window_target, &mut control_flow);
+                     }
+                     InternalEvent::OnWindowFocus => {
+                        event_handler(Event::WindowEvent {
+                            window_id: RootWindowId(WindowId),
+                            event: WindowEvent::Focused(true),
+                        }, &self.window_target, &mut control_flow);
+                     }
+                     InternalEvent::OnWindowBlur => {
+                        event_handler(Event::WindowEvent {
+                            window_id: RootWindowId(WindowId),
+                            event: WindowEvent::Focused(false),
+                        }, &self.window_target, &mut control_flow);
                      }
                      InternalEvent::TouchEvent { x, y, phase, id } => {
                          let phase = match phase {
@@ -195,30 +216,4 @@ impl<T> EventLoopWindowTarget<T> {
     pub fn set_theme(&self, _theme: Option<crate::window::Theme>) {}
     pub fn raw_display_handle_rwh_06(&self) -> Result<rwh_06::RawDisplayHandle, rwh_06::HandleError> { Err(rwh_06::HandleError::NotSupported) }
     }
-
-
-// Extern C Callbacks
-unsafe extern "C" fn on_surface_created(_component: *mut OH_NativeXComponent, _window: *mut std::ffi::c_void) {
-    publish_event(InternalEvent::OnSurfaceCreated(NativeXComponentPtr(_component)));
-}
-
-unsafe extern "C" fn on_surface_destroyed(_component: *mut OH_NativeXComponent, _window: *mut std::ffi::c_void) {
-    publish_event(InternalEvent::OnSurfaceDestroyed);
-}
-
-// TODO: Add other callbacks (Changed, DispatchTouchEvent)
-
-pub unsafe fn register_xcomponent(ptr: *mut std::ffi::c_void) {
-    use ohos_sys::xcomponent::{OH_NativeXComponent_Callback, OH_NativeXComponent_RegisterCallback};
-    
-    let component = ptr as *mut OH_NativeXComponent;
-    let mut callback = OH_NativeXComponent_Callback {
-        OnSurfaceCreated: Some(on_surface_created),
-        OnSurfaceChanged: None, // Add if needed
-        OnSurfaceDestroyed: Some(on_surface_destroyed),
-        DispatchTouchEvent: None, // Add if needed
-    };
-    
-    let _ = OH_NativeXComponent_RegisterCallback(component, &mut callback);
-}
 

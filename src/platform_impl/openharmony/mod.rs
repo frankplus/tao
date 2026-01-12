@@ -6,7 +6,10 @@ pub mod monitor;
 pub mod clipboard;
 pub mod icon;
 
-pub use event_loop::{EventLoop, EventLoopProxy, EventLoopWindowTarget, register_xcomponent};
+pub use event_loop::{
+    EventLoop, EventLoopProxy, EventLoopWindowTarget,
+    on_window_created, on_window_destroyed, on_window_focus, on_window_blur
+};
 pub use window::{PlatformSpecificWindowBuilderAttributes, Window, WindowId};
 pub use monitor::{MonitorHandle, VideoMode};
 
